@@ -44,25 +44,15 @@ def find_black_level(histogram: list[int]) -> int:
     """find the correct black level of this histogram"""
     med = len(histogram) // 2
     halve = histogram[:med]
-    # maxb = np.percentile(halve[4:], 99)
-    # minb = np.percentile(halve[4:], 1)
-    # good_range = [x if x < maxb else maxb for x in halve]
-    # good_range = [x if x > minb else minb for x in good_range]
-    # threshold = np.percentile(good_range, 95)
     threshold = np.percentile(halve, 95)
     mean = np.mean(histogram) * 0.75
-    # peaks0, _ = find_peaks(halve[4:], width=20, height=8000)
     peaks0, _ = find_peaks(halve, height=mean, width=10)
-    # peaks = find_peaks_cwt(halve[4:], widths=15)
-    # print(peaks0, peaks, _)
     peaks = find_peaks_cwt(halve, widths=10)
     peak = peaks[0] if len(peaks) else 0
-    # values = [(halve[i + 4], i + 4) for i in peaks0]
     values = [(halve[i], i) for i in peaks0 if i < 100]
     peak = max(values)[1] if values else med
     print(
         threshold,
-        # [int(4 + p) for p in peaks0],
         [int(p) for p in peaks0],
         [int(p) for p in peaks],
         peak,
@@ -92,12 +82,9 @@ def find_white_level(histogram: list[int]) -> int:
     """find the correct white level of this histogram"""
     med = len(histogram) // 2
     halve = histogram[med:]
-    maxw = np.percentile(halve, 99)
-    threshold = np.percentile([x if x < maxw else maxw for x in halve], 85)
-    peaks, _ = find_peaks(halve, prominence=1, width=10)
-    # print("\nWhite peaks", peaks, [halve[i] for i in peaks])
-    peak = peaks[-1] + med if len(peaks) else len(histogram)
-    peaks = find_peaks_cwt(halve, widths=10)
+    threshold = np.percentile(halve, 85)
+    mean = np.mean(histogram) * 0.75
+    peaks, _ = find_peaks(halve, height=mean, width=10)
     peak = max([(halve[i], i + med) for i in peaks])[1]
     start = find_white_start(med, peak, halve, peaks)
     print(threshold, [int(i + med) for i in peaks], start, peak, ">", end=" ")
