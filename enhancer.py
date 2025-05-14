@@ -16,11 +16,31 @@ def plot(histogram: list[int], limit: int = 5000) -> None:
     plt.show()
 
 
-def load_histogram(path: str) -> list[int]:
+def load_histogram(path: str) -> tuple[list[int], list[int], list[int], int]:
     """load the histogram of an image"""
     with Image.open(path) as img:
         histogram = img.histogram()
-    return histogram
+    smooth_histogram = get_histogram(img)
+    minv1 = 0
+    for i, v in enumerate(histogram):
+        if v >= 100:
+            minv1 = i
+            break
+    inverted = list(-np.array(smooth_histogram))
+    peaks, _ = find_peaks(smooth_histogram)
+    valleys, _ = find_peaks(inverted)
+    peaks2, _ = find_peaks(smooth_histogram, height=1000)
+    minv2 = 0
+    for i in range(peaks2[0], -1, -1):
+        if smooth_histogram[i] < 100:
+            minv2 = i + 1
+            break
+    print("peaks", peaks, [smooth_histogram[p] for p in peaks])
+    print("valleys", valleys, [smooth_histogram[v] for v in valleys])
+    print("minv", minv1, minv2)
+    print("black", find_black_level(smooth_histogram))
+    print("white", find_white_level(smooth_histogram))
+    return histogram, smooth_histogram, inverted, minv1
 
 
 def create_destination(destination: str) -> None:
@@ -43,55 +63,71 @@ def improve_pixel(p: int, wl: int, bl: int) -> int:
 def find_black_level(histogram: list[int]) -> int:
     """find the correct black level of this histogram"""
     med = len(histogram) // 2
-    halve = histogram[:med]
-    threshold = np.percentile(halve, 95)
-    mean = np.mean(histogram) * 0.75
-    peaks0, _ = find_peaks(halve, height=mean, width=10)
-    peaks = find_peaks_cwt(halve, widths=10)
-    peak = peaks[0] if len(peaks) else 0
-    values = [(halve[i], i) for i in peaks0 if i < 100]
-    peak = max(values)[1] if values else med
+    minv = 0
+    median = np.median(histogram)
+    peaks, _ = find_peaks(histogram, height=median)
+    for i, v in enumerate(histogram):
+        if v >= 100:
+            minv = i
+            break
+    if len(peaks):
+        for i in range(peaks[0], -1, -1):
+            if histogram[i] < 100:
+                minv = i + 1
+                break
+    peakscw = find_peaks_cwt(histogram, widths=10)
+    peak = peakscw[0] if len(peakscw) else 0
+    values = [(histogram[i], i) for i in peaks]
+    peak = values[0][1] if values else med
     print(
-        threshold,
-        [int(p) for p in peaks0],
+        minv,
         [int(p) for p in peaks],
+        [int(p) for p in peakscw],
         peak,
         ">",
         end=" ",
     )
-    for i in range(peak, med):
-        current = histogram[i]
-        if current < threshold:
-            return i
-    return 15
-
-
-def find_white_start(
-    med: int, peak: int, halve: list[int], peaks: list[int]
-) -> int:
-    """find the first to point to start looking for the correct white level
-    from the medium point between peaks (current peak and previous peak)"""
-    rest_peaks = [p for p in peaks if p + 128 != peak]
-    # print(rest_peaks, [(halve[i], (peak + i + med) // 2) for i in rest_peaks])
-    if rest_peaks:
-        return max([(halve[i], (peak + i + med) // 2) for i in rest_peaks])[1]
-    return med
+    if peak < minv + (255 - minv) / 4:
+        return peak
+    return minv + 15
 
 
 def find_white_level(histogram: list[int]) -> int:
     """find the correct white level of this histogram"""
     med = len(histogram) // 2
     halve = histogram[med:]
-    threshold = np.percentile(halve, 85)
-    mean = np.mean(histogram) * 0.75
-    peaks, _ = find_peaks(halve, height=mean, width=10)
-    peak = max([(halve[i], i + med) for i in peaks])[1]
-    start = find_white_start(med, peak, halve, peaks)
+    median = np.median(histogram)
+    mean = (
+        np.mean([x - median for x in histogram if x > median]) * 1.5 + median
+    )
+    peaks, _ = find_peaks(halve, height=mean)
+    peak = peaks[-1] + med if len(peaks) else 255
+    valleys, _ = find_peaks(-np.array(histogram))
+    start = peak - 20
+    if len(valleys):
+        for i in range(len(valleys) - 1, -1, -1):
+            valley = valleys[i]
+            if valley < peak:
+                start = valley
+                break
+    threshold = histogram[peak] * 0.2
     print(threshold, [int(i + med) for i in peaks], start, peak, ">", end=" ")
     for i in range(start, peak):
         if histogram[i] > threshold:
             return i
-    return 240
+    return peak - 15
+
+
+def get_histogram(img) -> list[int]:
+    """get the smooth histogram of image"""
+    histogram = img.histogram()
+    smooth_histogram = [
+        int(x) for x in np.convolve(histogram, np.ones(5) / 5, mode="same")
+    ]
+    min_value = min(smooth_histogram)
+    if min_value:
+        smooth_histogram = [x - min_value for x in smooth_histogram]
+    return smooth_histogram
 
 
 def process_image(
@@ -103,17 +139,13 @@ def process_image(
         if img.mode == "L":  # Mode 'L' is black and white
             # Calculate the black and white levels
             print(img.filename[-7:], end=" ")
-            histogram = img.histogram()
-            smooth_histogram = [
-                int(x)
-                for x in np.convolve(histogram, np.ones(5) / 5, mode="same")
-            ]
+            smooth_histogram = get_histogram(img)
             black_level = find_black_level(smooth_histogram)
             print(black_level, "|", end=" ")
             white_level = find_white_level(smooth_histogram)
             print(white_level, end=" ")
             if black_level == 0 or white_level == 255:
-                print(histogram, end=" ")
+                print(smooth_histogram, end=" ")
                 exit(1)
             print()
 
