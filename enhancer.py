@@ -130,15 +130,29 @@ def get_histogram(img) -> list[int]:
     return smooth_histogram
 
 
+def check_bw(pixels: list[tuple[int, int, int]]) -> bool:
+    """check if RGB image is black and white"""
+    diffs = []
+    for p in pixels:
+        r, g, b = p
+        diffs.append(max(abs(r - g), abs(r - b), abs(g - b)))
+    return bool(np.mean(diffs) < 1)
+
+
 def process_image(
     input_path: str, output_path: str, split: bool = False
 ) -> None:
     """process image to correct B&W levels and split if required"""
     with Image.open(input_path) as img:
+        filename = img.filename
         # Check if the image is color or black and white
+        if img.mode == "RGB":
+            if check_bw(img.getdata()):
+                print(input_path, "is BW")
+                img = img.convert("L")
         if img.mode == "L":  # Mode 'L' is black and white
             # Calculate the black and white levels
-            print(img.filename[-7:], end=" ")
+            print(filename[-7:], end=" ")
             smooth_histogram = get_histogram(img)
             black_level = find_black_level(smooth_histogram)
             print(black_level, "|", end=" ")
