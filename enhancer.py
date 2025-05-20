@@ -136,7 +136,7 @@ def check_bw(pixels: list[tuple[int, int, int]]) -> bool:
     for p in pixels:
         r, g, b = p
         diffs.append(max(abs(r - g), abs(r - b), abs(g - b)))
-    return bool(np.mean(diffs) < 1)
+    return bool(np.mean(diffs) < 1 or np.median(diffs) == 0)
 
 
 def process_image(
